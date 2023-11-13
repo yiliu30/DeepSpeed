@@ -113,6 +113,51 @@ def safe_get_full_fp32_param(param):
         return param.get_full_hp_param()
     return None
 
+### Local API  START ###
+
+# TODO: Figure out the correct return dtype
+def safe_get_local_grad(param):
+    """Assemble and return the fp32 gradient of a low-precision (e.g., fp16) parameter.
+        Args:
+            param (``torch.nn.Parameter``): A model parameter
+    """
+    if param.grad is not None:
+        return param.grad
+
+    # ZeRO stage 3 param
+    if hasattr(param, 'ds_id'):
+        return param._z3_optimizer.get_local_fp32_grad_for_param(param)
+
+    # # ZeRO stage 1, 2, and bf16_optimizer params
+    # if hasattr(param, '_hp_mapping'):
+    #     return param.get_full_hp_grad()
+
+def safe_set_local_fp32_param(param, value):
+    """Update the partitioned fp32 parameter of a low-precision (e.g., fp16) parameter.
+        Args:
+            param (``torch.nn.Parameter``): A model parameter
+            value (``torch.Tensor``): New value
+    """
+    # ZeRO stage 3 param
+    if hasattr(param, 'ds_id'):
+        param._z3_optimizer.set_local_hp_param(value, param)
+
+
+def safe_get_local_fp32_param(param):
+    """Assemble and return the fp32 parameter of a low-precision (e.g., fp16) parameter.
+        Args:
+            param (``torch.nn.Parameter``): A model parameter
+    """
+    # ZeRO stage 3 param
+    if hasattr(param, 'ds_id'):
+        return param._z3_optimizer.get_local_fp32_param(param)
+
+    # # ZeRO stage 1, 2, and bf16_optimizer params
+    # if hasattr(param, '_hp_mapping'):
+    #     return param.get_full_hp_param()
+    return None
+### Local API  END ###
+
 
 def safe_set_full_fp32_param(param, value):
     """Update the partitioned fp32 parameter of a low-precision (e.g., fp16) parameter.
