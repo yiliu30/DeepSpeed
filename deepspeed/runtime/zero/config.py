@@ -60,6 +60,8 @@ def read_zero_config_deprecated(param_dict):
 
 
 def get_zero_config(param_dict):
+    # from deepspeed.utils.utility import ForkedPdb
+    # ForkedPdb().set_trace()
     if ZERO_OPTIMIZATION in param_dict:
         zero_config_dict = param_dict[ZERO_OPTIMIZATION]
         if isinstance(zero_config_dict, bool):

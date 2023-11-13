@@ -941,9 +941,12 @@ class Init(InsertPostInitMethodToModuleSubClasses):
 
     def _zero_init_param(self, param):
         self._convert_to_deepspeed_param(param)
+        logger.info(param.ds_summary())
         if dist.get_world_group() == self.get_dp_process_group():
-            dist.broadcast(param, 0, self.get_dp_process_group())
+            logger.info(f"[_zero_init_param][get_world_group equal get_dp_process_group] [broadcast params][param.shape: {param.shape}]")
+            dist.broadcast(param, 0, self.get_dp_process_group(), )
         else:
+            logger.info(f"[_zero_init_param][get_world_group NOT equal get_dp_process_group] [broadcast params][param.shape: {param.shape}]")
             dist.broadcast(param, dist.get_global_rank(self.get_dp_process_group(), 0), self.get_dp_process_group())
         param.partition()
 
@@ -1385,7 +1388,8 @@ class Init(InsertPostInitMethodToModuleSubClasses):
 
     def _partition(self, param_list, force=False, has_been_updated=False):
         for param in param_list:
-            print_rank_0(f"Before Partitioning Param {param.ds_id}", force=False)
+            logger.info(f"Before Partitioning Param {param.ds_id}, param type: {type(param)}")
+            print_rank_0(f"Before Partitioning Param {param.ds_id}", force=True)
             if self.zero_param_process_group is not None:
                 self._partition_param_sec(param, has_been_updated=has_been_updated)
             self._partition_param(param, has_been_updated=has_been_updated)
@@ -1399,9 +1403,9 @@ class Init(InsertPostInitMethodToModuleSubClasses):
     def _partition_param(self, param, buffer=None, has_been_updated=False):
         assert param.ds_status is not ZeroParamStatus.INFLIGHT, f" {param} Cannot partition a param in flight"
         global reuse_buffers
-        print_rank_0(f"Param id {param.ds_id} status is {param.ds_status}", force=False)
+        print_rank_0(f"Param id {param.ds_id} status is {param.ds_status}", force=True)
         if param.ds_status is ZeroParamStatus.AVAILABLE:
-            print_rank_0(f"Partitioning param id {param.ds_id} reuse buffers {reuse_buffers}", force=False)
+            print_rank_0(f"Partitioning param id {param.ds_id} reuse buffers {reuse_buffers}", force=True)
             # if reuse_buffers and False:
             #     numel = buffer.numel()
             #     buffer = param.data.view(-1)
@@ -1419,13 +1423,13 @@ class Init(InsertPostInitMethodToModuleSubClasses):
                 #print_rank_0(f"Param  {param.ds_id} pri {param.ds_tensor.size()}  loc? {param.ds_tensor.final_location}", force=True)
                 #param.data = param.ds_tensor.data
 
-                see_memory_usage(f'Before partitioning param {param.ds_id} {param.shape}', force=False)
+                see_memory_usage(f'Before partitioning param {param.ds_id} {param.shape}', force=True)
                 # param.data does not store anything meaningful in partitioned state
                 free_param(param)
-                see_memory_usage(f'After partitioning param {param.ds_id} {param.shape}', force=False)
+                see_memory_usage(f'After partitioning param {param.ds_id} {param.shape}', force=True)
 
                 if param.ds_tensor.final_location == OffloadDeviceEnum.nvme:
-                    print_rank_0(f"Param {param.ds_id} partition released since it exists in nvme", force=False)
+                    print_rank_0(f"Param {param.ds_id} partition released since it exists in nvme", force=True)
                     param.nvme_swapper.remove_partition_and_release_buffers([param])
                     print_rank_0(
                         f"after swap Param {param.ds_id} {param.ds_tensor.shape} partition released since it exists in nvme",

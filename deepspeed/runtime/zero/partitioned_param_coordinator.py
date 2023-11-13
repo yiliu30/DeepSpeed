@@ -18,7 +18,7 @@ from deepspeed.utils.debug import debug_module2name_id, debug_param2name_id
 from deepspeed.accelerator import get_accelerator
 import logging
 
-ENABLE_PROFILER = False
+ENABLE_PROFILER = True
 
 
 def debug_rank0(message: str) -> None:
@@ -245,7 +245,7 @@ class PartitionedParameterCoordinator:
     def _dump_param_ids(self, tag, mod_id, p_ids, step_id=None):
         if step_id is None:
             step_id = self.__step_id
-        print_rank_0(f'{tag} mod = {mod_id}, step = {step_id}, p_ids = {p_ids}', force=False)
+        print_rank_0(f'{tag} mod = {mod_id}, step = {step_id}, p_ids = {p_ids}', force=True)
 
     """Fetch and Release
     Fetching, prefetching, and releasing parameters
@@ -272,6 +272,7 @@ class PartitionedParameterCoordinator:
         fetch_numel = sum(
             [p.partition_numel() for p in params_to_fetch if p.ds_status == ZeroParamStatus.NOT_AVAILABLE])
         if fetch_numel > 0:
+            logger.info(f"[fetch_sub_module], there {fetch_numel} params needed to be fetched...")
             event_name = __class__.FORWARD_FETCH_SUBMIT if forward else __class__.BACKWARD_FETCH_SUBMIT
             self._dump_param_ids(event_name, current_submodule.id,
                                  [p.ds_id for p in params_to_fetch if p.ds_status == ZeroParamStatus.NOT_AVAILABLE])
@@ -288,7 +289,9 @@ class PartitionedParameterCoordinator:
         wait_event_name = __class__.FORWARD_FETCH_WAIT if forward else __class__.BACKWARD_FETCH_WAIT
         self.__profiler.start_event(wait_event_name)
         # wait for parameters in the immediately needed submodule to become available
+        logger.info(f"[rank: {dist.get_rank()}][fetch_sub_module], fetch {len(params_to_fetch)} ...")
         for param in params_to_fetch:
+            logger.info(f"[rank: {dist.get_rank()}][fetch_sub_module], for param[{param.ds_summary()}], add active_sub_modules submodule(id {current_submodule.id}){[current_submodule]} ")
             param.ds_active_sub_modules.add(current_submodule.id)
             if logger.isEnabledFor(logging.DEBUG):
                 debug_rank0(f"-wait: {param.ds_summary()}")
@@ -389,12 +392,17 @@ class PartitionedParameterCoordinator:
     def release_sub_module(self, submodule: Module, backward: bool) -> None:
         """release the parameters of a sub module, assuming they meet conditions to
         be released."""
+        logger.info(f"[rank: {dist.get_rank()}][relase sub module {submodule}]")
         params_to_release = (self.__params_to_release(submodule, self.__step_id) if self.is_complete_trace() else set(
             p.ds_id for p in iter_params(submodule)))
         for param in iter_params(submodule):
+            logger.info(f"[rank: {dist.get_rank()}][ds_active_sub_modules (before discard): {param.ds_active_sub_modules}]")
             param.ds_active_sub_modules.discard(submodule.id)
+            logger.info(f"[rank: {dist.get_rank()}][ds_active_sub_modules (after discard): {param.ds_active_sub_modules}]")
             if param.ds_id in params_to_release and not param.is_external_param:
+                logger.info(f"[rank: {dist.get_rank()}][param status before release: {param.ds_status}, {param.ds_summary()}]")
                 self.__release_param(param, backward)
+                logger.info(f"[rank: {dist.get_rank()}][param status after release: {param.ds_status}, {param.ds_summary()}]")
 
     @instrument_w_nvtx
     @torch.no_grad()
@@ -461,11 +469,16 @@ class PartitionedParameterCoordinator:
 
     @instrument_w_nvtx
     def __release_param(self, param: Parameter, backward: bool) -> None:
-        if param.ds_status == ZeroParamStatus.AVAILABLE and not param.ds_active_sub_modules:
-            if logger.isEnabledFor(logging.DEBUG):
-                debug_rank0(f"-release: {param.ds_summary()}")
-            param.partition(backward=backward)
-            self.__n_available_params -= param.ds_numel
+        if param.ds_status == ZeroParamStatus.AVAILABLE:
+            logger.info(f"[rank: {dist.get_rank()}][__release_param][current param status is {param.ds_status}]")
+            if not param.ds_active_sub_modules:
+                logger.info(f"[rank: {dist.get_rank()}][__release_param][current param not has active_sub_modules]")
+                if logger.isEnabledFor(logging.DEBUG):
+                    debug_rank0(f"-release: {param.ds_summary()}")
+                param.partition(backward=backward)
+                self.__n_available_params -= param.ds_numel
+            else:
+                 logger.info(f"[rank: {dist.get_rank()}][__release_param][current param has {len(param.ds_active_sub_modules) } active_sub_modules][{param.ds_active_sub_modules}]")
 
     @instrument_w_nvtx
     @functools.lru_cache(maxsize=None)

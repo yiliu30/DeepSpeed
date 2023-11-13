@@ -196,6 +196,7 @@ class TorchBackend(Backend):
             return torch.distributed.broadcast(tensor=tensor, src=src, group=group, async_op=async_op)
 
     def all_gather(self, tensor_list, tensor, group=None, async_op=False):
+        utils.logger.info(f"[rank: {self.get_rank()}][all_gather] start to all gather {len(tensor_list)} tensor, [shape: {[t.shape for t in tensor_list]}]")
         if DS_COMM_ALL_GATHER_OFF:
             if int(os.getenv('RANK', '0')) == 0:
                 utils.logger.warning("All Gather is OFF")

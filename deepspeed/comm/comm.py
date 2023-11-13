@@ -35,6 +35,7 @@ from deepspeed.utils import timer, get_caller_func
 from deepspeed.comm.torch import TorchBackend
 
 from deepspeed import utils
+from deepspeed.utils import logger
 from datetime import timedelta
 
 # Current deepspeed.comm backend (cdb) global object for simple access by client code
