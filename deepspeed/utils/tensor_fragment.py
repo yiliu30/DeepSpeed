@@ -156,6 +156,39 @@ def safe_get_local_fp32_param(param):
     # if hasattr(param, '_hp_mapping'):
     #     return param.get_full_hp_param()
     return None
+
+def safe_get_local_optimizer_state(param, optim_state_key):
+    """Assemble and return the fp32 optimizer state of a low-precision (e.g., fp16) parameter.
+
+        Args:
+            param (``torch.nn.Parameter``): A model parameter
+            optim_state_key (``string``): Key value of optimizer state (e.g., `exp_avg` in Adam optimizer)
+    """
+    # ZeRO stage 3 param
+    if hasattr(param, 'ds_id'):
+        return param._z3_optimizer.get_local_fp32_param(param, optim_state_key)
+
+    # # ZeRO stage 1, 2, and bf16_optimizer params
+    # if hasattr(param, '_hp_mapping'):
+    #     return param.get_full_hp_param(optim_state_key)
+    return None
+
+def safe_set_local_optimizer_state(param, value, optim_state_key):
+    """Update the partitioned fp32 optimizer state of a low-precision (e.g., fp16) parameter.
+
+        Args:
+            param (``torch.nn.Parameter``): A model parameter
+            value (``torch.Tensor``): New value
+            optim_state_key (``string``): Key value of optimizer state (e.g., `exp_avg` in Adam optimizer)
+    """
+    # ZeRO stage 3 param
+    if hasattr(param, 'ds_id'):
+        param._z3_optimizer.set_local_hp_param(value, param, optim_state_key)
+
+    # # ZeRO stage 1, 2, and bf16_optimizer params
+    # if hasattr(param, '_hp_mapping'):
+    #     param.set_full_hp_param(value, optim_state_key)
+
 ### Local API  END ###
 
 
